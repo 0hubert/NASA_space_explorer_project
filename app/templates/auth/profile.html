@@ -21,25 +21,65 @@
             <div class="card shadow">
                 <div class="card-body">
                     <h4 class="card-title mb-4">My Favorites</h4>
-                    {% if current_user.favorites %}
+                    {% if favorites.items %}
                         <div class="row g-4">
-                            {% for favorite in current_user.favorites %}
+                            {% for favorite in favorites.items %}
                             <div class="col-md-6">
                                 <div class="card h-100">
                                     <img src="{{ favorite.image_url }}" class="card-img-top" alt="{{ favorite.title }}">
                                     <div class="card-body">
                                         <h5 class="card-title">{{ favorite.title }}</h5>
                                         <p class="card-text text-muted">Added on {{ favorite.created_at.strftime('%B %d, %Y') }}</p>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <a href="{{ url_for('apod.index', date=favorite.nasa_id) }}" class="btn btn-sm btn-primary">View</a>
+                                            <form action="{{ url_for('auth.remove_favorite', favorite_id=favorite.id) }}" method="POST" class="d-inline">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to remove this favorite?')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
+
+                        <!-- Pagination -->
+                        {% if favorites.pages > 1 %}
+                        <div class="d-flex justify-content-center mt-4">
+                            <nav aria-label="Page navigation">
+                                <ul class="pagination">
+                                    {% if favorites.has_prev %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('auth.profile', page=favorites.prev_num) }}">Previous</a>
+                                    </li>
+                                    {% endif %}
+
+                                    {% for page_num in favorites.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                                        {% if page_num %}
+                                            <li class="page-item {% if page_num == favorites.page %}active{% endif %}">
+                                                <a class="page-link" href="{{ url_for('auth.profile', page=page_num) }}">{{ page_num }}</a>
+                                            </li>
+                                        {% else %}
+                                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if favorites.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('auth.profile', page=favorites.next_num) }}">Next</a>
+                                    </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        </div>
+                        {% endif %}
                     {% else %}
                         <div class="text-center py-5">
                             <i class="fas fa-heart-broken fa-3x mb-3 text-muted"></i>
                             <p class="text-muted">You haven't added any favorites yet.</p>
                             <p>Start exploring and add your favorite space images!</p>
+                            <a href="{{ url_for('apod.index') }}" class="btn btn-nasa mt-3">Explore APOD</a>
                         </div>
                     {% endif %}
                 </div>

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Astronomy Picture of the Day - NASA Space Explorer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+    .apod-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    .apod-image {
+        width: 100%;
+        max-height: 600px;
+        object-fit: contain;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .favorite-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(255,255,255,0.9);
+        border: none;
+        border-radius: 50%;
+        padding: 10px;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .favorite-btn:hover {
+        transform: scale(1.1);
+    }
+    .date-picker-container {
+        margin: 20px 0;
+        text-align: center;
+    }
+    #datePicker {
+        padding: 8px 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 16px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container apod-container">
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        <div class="date-picker-container">
+            <input type="text" id="datePicker" placeholder="Select date" value="{{ current_date.strftime('%Y-%m-%d') }}">
+        </div>
+
+        <div class="card shadow-lg">
+            <div class="card-body position-relative">
+                {% if current_user.is_authenticated %}
+                    <button class="favorite-btn" onclick="toggleFavorite('{{ current_date.strftime('%Y-%m-%d') }}')" title="Add to favorites">
+                        <i class="fas fa-heart {% if is_favorite %}text-danger{% else %}text-secondary{% endif %}"></i>
+                    </button>
+                {% endif %}
+
+                <img src="{{ apod.image_url }}" alt="{{ apod.title }}" class="apod-image mb-4">
+                
+                <h2 class="card-title mb-3">{{ apod.title }}</h2>
+                <p class="text-muted mb-4">{{ current_date.strftime('%B %d, %Y') }}</p>
+                
+                <div class="card-text">
+                    {{ apod.explanation | safe }}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+    // Initialize date picker
+    flatpickr("#datePicker", {
+        defaultDate: "{{ current_date.strftime('%Y-%m-%d') }}",
+        maxDate: "today",
+        dateFormat: "Y-m-d",
+        onChange: function(selectedDates, dateStr) {
+            window.location.href = "{{ url_for('apod.index') }}?date=" + dateStr;
+        }
+    });
+
+    // Favorite functionality
+    function toggleFavorite(date) {
+        fetch("{{ url_for('apod.toggle_favorite') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'date=' + date
+        })
+        .then(response => response.json())
+        .then(data => {
+            const heartIcon = document.querySelector('.favorite-btn i');
+            if (data.is_favorite) {
+                heartIcon.classList.remove('text-secondary');
+                heartIcon.classList.add('text-danger');
+            } else {
+                heartIcon.classList.remove('text-danger');
+                heartIcon.classList.add('text-secondary');
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+</script>
+{% endblock %} 
