@@ -25,15 +25,41 @@ class NASAAPI:
         params = {'date': date} if date else {}
         return self._make_request(endpoint, params)
 
-    def get_mars_photos(self, rover="perseverance", sol=None, earth_date=None):
-        """Get Mars Rover photos"""
+    def get_mars_photos(self, rover="perseverance", sol=None, earth_date=None, camera=None, page=1):
+        """Get Mars Rover photos with enhanced parameters and error handling"""
         endpoint = f"/mars-photos/api/v1/rovers/{rover}/photos"
-        params = {}
-        if sol:
-            params['sol'] = sol
-        if earth_date:
-            params['earth_date'] = earth_date
-        return self._make_request(endpoint, params)
+        params = {'page': page}
+
+        # Validate and add parameters
+        if sol is not None and earth_date is not None:
+            raise ValueError("Cannot specify both sol and earth_date")
+        
+        if sol is not None:
+            try:
+                params['sol'] = int(sol)
+            except ValueError:
+                raise ValueError("Sol must be a valid integer")
+                
+        if earth_date is not None:
+            try:
+                # Validate date format
+                datetime.strptime(earth_date, '%Y-%m-%d')
+                params['earth_date'] = earth_date
+            except ValueError:
+                raise ValueError("earth_date must be in YYYY-MM-DD format")
+                
+        if camera is not None:
+            params['camera'] = camera.upper()
+
+        try:
+            return self._make_request(endpoint, params)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 400:
+                raise ValueError("Invalid parameters provided")
+            elif e.response.status_code == 404:
+                raise ValueError(f"No photos found for rover {rover} with specified parameters")
+            else:
+                raise
 
     def get_neo_feed(self, start_date=None, end_date=None):
         """Get Near Earth Objects feed"""
