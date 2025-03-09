@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+
+{% block title %}Near Earth Objects Tracker - NASA Space Explorer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 2rem;
+    }
+    .data-card {
+        height: 100%;
+        transition: transform 0.2s;
+    }
+    .data-card:hover {
+        transform: translateY(-5px);
+    }
+    .search-box {
+        margin-bottom: 2rem;
+    }
+    .educational-section {
+        background-color: #f8f9fa;
+        padding: 2rem;
+        border-radius: 10px;
+        margin-top: 2rem;
+    }
+    .risk-indicator {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
+    .risk-low { background-color: #28a745; }
+    .risk-medium { background-color: #ffc107; }
+    .risk-high { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        <!-- Date Range Selection -->
+        <div class="row mb-4">
+            <div class="col-md-6 offset-md-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Select Date Range</h5>
+                        <div class="input-group mb-2">
+                            <input type="text" id="start-date" class="form-control" value="{{ start_date }}" placeholder="Start Date">
+                            <span class="input-group-text">to</span>
+                            <input type="text" id="end-date" class="form-control" value="{{ end_date }}" placeholder="End Date">
+                            <button class="btn btn-nasa" onclick="updateData()">Update</button>
+                        </div>
+                        <div class="text-muted small">
+                            <div class="mb-1">
+                                <i class="fas fa-info-circle"></i> 
+                                NASA API Guidelines:
+                            </div>
+                            <ul class="mb-0 ps-4">
+                                <li>Best results with 7-day ranges</li>
+                                <li>Longer ranges may be slower or result in errors</li>
+                                <li>Historical and future data available</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card search-box">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <input type="text" id="search-input" class="form-control" placeholder="Search by name...">
+                            </div>
+                            <div class="col-md-3">
+                                <select id="size-filter" class="form-select">
+                                    <option value="">All Sizes</option>
+                                    <option value="small">Small (<0.5 km)</option>
+                                    <option value="medium">Medium (0.5-2 km)</option>
+                                    <option value="large">Large (>2 km)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select id="hazard-filter" class="form-select">
+                                    <option value="">All Objects</option>
+                                    <option value="true">Potentially Hazardous</option>
+                                    <option value="false">Non-Hazardous</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-nasa w-100" onclick="applyFilters()">Filter</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Visualization Cards -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card data-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Daily NEO Count</h5>
+                        <div class="chart-container">
+                            <canvas id="dailyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card data-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Hazard Assessment</h5>
+                        <div class="chart-container">
+                            <canvas id="hazardChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card data-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Size Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="sizeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card data-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Closest Approaches</h5>
+                        <div class="chart-container">
+                            <canvas id="approachChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEO Data Table -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Near Earth Objects</h5>
+                        <div class="table-responsive">
+                            <table class="table" id="neo-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Diameter (km)</th>
+                                        <th>Velocity (km/h)</th>
+                                        <th>Miss Distance (km)</th>
+                                        <th>Approach Date</th>
+                                        <th>Hazard Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="neo-table-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Educational Content -->
+        <div class="educational-section">
+            <h3>Understanding Near Earth Objects</h3>
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <h5>What are NEOs?</h5>
+                    <p>Near-Earth Objects (NEOs) are asteroids and comets that orbit the Sun and come within 1.3 astronomical units (AU) of Earth's orbit. They are important for both scientific research and planetary defense.</p>
+                </div>
+                <div class="col-md-4">
+                    <h5>Size Classification</h5>
+                    <ul class="list-unstyled">
+                        <li>🔹 Small: < 0.5 km in diameter</li>
+                        <li>🔸 Medium: 0.5 - 2 km in diameter</li>
+                        <li>⭐ Large: > 2 km in diameter</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h5>Hazard Assessment</h5>
+                    <p>
+                        <span class="risk-indicator risk-low"></span> Low Risk: Non-hazardous<br>
+                        <span class="risk-indicator risk-medium"></span> Medium Risk: Close approach<br>
+                        <span class="risk-indicator risk-high"></span> High Risk: Potentially hazardous
+                    </p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Initialize date pickers
+    flatpickr("#start-date", {
+        dateFormat: "Y-m-d",
+        allowInput: true
+    });
+
+    flatpickr("#end-date", {
+        dateFormat: "Y-m-d",
+        allowInput: true
+    });
+
+    // Chart instances
+    let dailyChart, hazardChart, sizeChart, approachChart;
+    let neoData = {{ neo_data|tojson|safe }};
+
+    {% if warnings %}
+        // Display initial warnings if any
+        showWarning(`{{ warnings|join('<br>')|safe }}`);
+    {% endif %}
+
+    function showWarning(message) {
+        const container = document.querySelector('.container');
+        const existingWarning = container.querySelector('.alert-warning');
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+        
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-warning alert-dismissible fade show';
+        alert.innerHTML = `
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        container.insertBefore(alert, container.firstChild);
+    }
+
+    function showError(message) {
+        const container = document.querySelector('.container');
+        const existingAlert = container.querySelector('.alert-danger');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+        
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger alert-dismissible fade show';
+        alert.innerHTML = `
+            <i class="fas fa-exclamation-circle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        container.insertBefore(alert, container.firstChild);
+    }
+
+    function updateData() {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        
+        if (!startDate || !endDate) {
+            showError('Please select both start and end dates');
+            return;
+        }
+
+        // Remove any existing alerts
+        const existingAlerts = document.querySelectorAll('.alert');
+        existingAlerts.forEach(alert => alert.remove());
+
+        fetch(`/neo/data?start_date=${startDate}&end_date=${endDate}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                
+                // Show warnings if any
+                if (data.warnings && data.warnings.length > 0) {
+                    showWarning(data.warnings.join('<br>'));
+                }
+                
+                // Update data and visualizations
+                delete data.warnings; // Remove warnings from data object
+                neoData = data;
+                updateCharts();
+                updateTable();
+            })
+            .catch(error => {
+                showError('Error fetching NEO data. Please try again.');
+                console.error('Error:', error);
+            });
+    }
+
+    function initializeCharts() {
+        // Daily Count Chart
+        dailyChart = new Chart(document.getElementById('dailyChart'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(neoData.daily_counts),
+                datasets: [{
+                    label: 'Number of NEOs',
+                    data: Object.values(neoData.daily_counts),
+                    backgroundColor: 'rgba(252, 61, 33, 0.6)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Hazard Assessment Chart
+        hazardChart = new Chart(document.getElementById('hazardChart'), {
+            type: 'pie',
+            data: {
+                labels: ['Potentially Hazardous', 'Non-Hazardous'],
+                datasets: [{
+                    data: [
+                        neoData.hazardous_counts.hazardous,
+                        neoData.hazardous_counts.non_hazardous
+                    ],
+                    backgroundColor: ['#dc3545', '#28a745']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Size Distribution Chart
+        sizeChart = new Chart(document.getElementById('sizeChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Small', 'Medium', 'Large'],
+                datasets: [{
+                    data: [
+                        neoData.size_distribution.small,
+                        neoData.size_distribution.medium,
+                        neoData.size_distribution.large
+                    ],
+                    backgroundColor: ['#17a2b8', '#ffc107', '#dc3545']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Closest Approaches Chart
+        approachChart = new Chart(document.getElementById('approachChart'), {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Distance vs Velocity',
+                    data: neoData.closest_approaches.map(approach => ({
+                        x: approach.distance_km,
+                        y: approach.velocity_kph
+                    })),
+                    backgroundColor: 'rgba(11, 61, 145, 0.6)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Miss Distance (km)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Velocity (km/h)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateTable() {
+        const tableBody = document.getElementById('neo-table-body');
+        tableBody.innerHTML = '';
+        
+        neoData.all_objects.forEach(obj => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${obj.name}</td>
+                <td>${obj.diameter_km.toFixed(3)}</td>
+                <td>${obj.velocity_kph.toFixed(2)}</td>
+                <td>${obj.miss_distance_km.toFixed(0)}</td>
+                <td>${obj.approach_date}</td>
+                <td>
+                    <span class="risk-indicator ${obj.hazardous ? 'risk-high' : 'risk-low'}"></span>
+                    ${obj.hazardous ? 'High' : 'Low'}
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function updateCharts() {
+        dailyChart.data.labels = Object.keys(neoData.daily_counts);
+        dailyChart.data.datasets[0].data = Object.values(neoData.daily_counts);
+        dailyChart.update();
+
+        hazardChart.data.datasets[0].data = [
+            neoData.hazardous_counts.hazardous,
+            neoData.hazardous_counts.non_hazardous
+        ];
+        hazardChart.update();
+
+        sizeChart.data.datasets[0].data = [
+            neoData.size_distribution.small,
+            neoData.size_distribution.medium,
+            neoData.size_distribution.large
+        ];
+        sizeChart.update();
+
+        approachChart.data.datasets[0].data = neoData.closest_approaches.map(approach => ({
+            x: approach.distance_km,
+            y: approach.velocity_kph
+        }));
+        approachChart.update();
+    }
+
+    function applyFilters() {
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const sizeFilter = document.getElementById('size-filter').value;
+        const hazardFilter = document.getElementById('hazard-filter').value;
+
+        const filteredData = neoData.all_objects.filter(obj => {
+            const matchesSearch = obj.name.toLowerCase().includes(searchTerm);
+            const matchesSize = !sizeFilter || (
+                (sizeFilter === 'small' && obj.diameter_km < 0.5) ||
+                (sizeFilter === 'medium' && obj.diameter_km >= 0.5 && obj.diameter_km < 2) ||
+                (sizeFilter === 'large' && obj.diameter_km >= 2)
+            );
+            const matchesHazard = !hazardFilter || obj.hazardous.toString() === hazardFilter;
+
+            return matchesSearch && matchesSize && matchesHazard;
+        });
+
+        const tableBody = document.getElementById('neo-table-body');
+        tableBody.innerHTML = '';
+        
+        filteredData.forEach(obj => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${obj.name}</td>
+                <td>${obj.diameter_km.toFixed(3)}</td>
+                <td>${obj.velocity_kph.toFixed(2)}</td>
+                <td>${obj.miss_distance_km.toFixed(0)}</td>
+                <td>${obj.approach_date}</td>
+                <td>
+                    <span class="risk-indicator ${obj.hazardous ? 'risk-high' : 'risk-low'}"></span>
+                    ${obj.hazardous ? 'High' : 'Low'}
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    // Initialize everything when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+        updateTable();
+    });
+</script>
+{% endblock %} 
