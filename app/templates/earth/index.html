@@ -211,8 +211,11 @@
 
     // Add click handler to map
     map.on('click', function(e) {
-        document.getElementById('selected-lat').value = e.latlng.lat;
-        document.getElementById('selected-lon').value = e.latlng.lng;
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        
+        document.getElementById('selected-lat').value = lat;
+        document.getElementById('selected-lon').value = lon;
         
         // Add or update marker
         if (selectedMarker) {
@@ -220,6 +223,9 @@
         } else {
             selectedMarker = L.marker(e.latlng).addTo(map);
         }
+
+        // Update climate data for the selected location
+        updateClimateData(lat, lon);
     });
 
     // Initialize date pickers with safer defaults for NASA imagery
@@ -377,8 +383,118 @@
         document.getElementById('error-container').style.display = 'none';
     }
 
-    // Location search with improved error handling
-    const searchInput = document.getElementById('location-search');
+    // Climate data charts
+    let temperatureChart, precipitationChart;
+
+    function initializeCharts() {
+        const temperatureCtx = document.getElementById('temperatureChart').getContext('2d');
+        temperatureChart = new Chart(temperatureCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Temperature (°C)',
+                    data: [],
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Temperature Over Time'
+                    }
+                },
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        });
+
+        const precipitationCtx = document.getElementById('precipitationChart').getContext('2d');
+        precipitationChart = new Chart(precipitationCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Precipitation (mm)',
+                    data: [],
+                    backgroundColor: 'rgb(54, 162, 235)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Precipitation Over Time'
+                    }
+                },
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Precipitation (mm)'
+                        },
+                        beginAtZero: true
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async function updateClimateData(lat, lon) {
+        try {
+            const response = await fetch(`/earth/climate?lat=${lat}&lon=${lon}`);
+            const data = await response.json();
+
+            if (data.error) {
+                showError(`Error loading climate data: ${data.error}`);
+                return;
+            }
+
+            // Update temperature chart
+            temperatureChart.data.labels = data.dates;
+            temperatureChart.data.datasets[0].data = data.temperatures;
+            temperatureChart.update();
+
+            // Update precipitation chart
+            precipitationChart.data.labels = data.dates;
+            precipitationChart.data.datasets[0].data = data.precipitation;
+            precipitationChart.update();
+
+        } catch (error) {
+            showError('Error loading climate data. Please try again later.');
+            console.error('Error:', error);
+        }
+    }
+
+    // Update location search to also fetch climate data
     const searchDebounced = _.debounce(async (query) => {
         if (!query.trim()) return;
         
@@ -406,6 +522,9 @@
                 selectedMarker = L.marker([lat, lon]).addTo(map);
             }
             
+            // Update climate data for the searched location
+            updateClimateData(lat, lon);
+            
             hideError();
         } catch (error) {
             showError('Error searching location. Please try again.');
@@ -413,45 +532,13 @@
         }
     }, 500);
 
-    searchInput.addEventListener('input', (e) => searchDebounced(e.target.value));
-
-    // Climate data charts
-    function initializeCharts() {
-        const temperatureChart = new Chart(
-            document.getElementById('temperatureChart'),
-            {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Temperature',
-                        data: [],
-                        borderColor: 'rgb(255, 99, 132)',
-                        tension: 0.1
-                    }]
-                }
-            }
-        );
-
-        const precipitationChart = new Chart(
-            document.getElementById('precipitationChart'),
-            {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Precipitation',
-                        data: [],
-                        backgroundColor: 'rgb(54, 162, 235)'
-                    }]
-                }
-            }
-        );
-    }
-
     // Initialize everything
     document.addEventListener('DOMContentLoaded', function() {
         initializeCharts();
+        
+        // Add search input event listener
+        const searchInput = document.getElementById('location-search');
+        searchInput.addEventListener('input', (e) => searchDebounced(e.target.value));
     });
 </script>
 {% endblock %} 
