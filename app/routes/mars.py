@@ -58,21 +58,21 @@ def get_cached_photos(rover, camera, earth_date, sol):
     """Cache Mars photos to improve performance"""
     cache_key = f"{rover}:{camera}:{earth_date}:{sol}"
     
-    # Try to get from database first
-    if earth_date:
-        photos = MarsPhoto.query.filter_by(
-            rover_name=rover,
-            earth_date=datetime.strptime(earth_date, '%Y-%m-%d').date()
-        )
-        if camera:
-            photos = photos.filter_by(camera_name=camera)
-        photos = photos.all()
-        
-        if photos:
-            return photos
-
-    # If not in database, fetch from API
     try:
+        # Try to get from database first
+        if earth_date:
+            photos = MarsPhoto.query.filter_by(
+                rover_name=rover,
+                earth_date=datetime.strptime(earth_date, '%Y-%m-%d').date()
+            )
+            if camera:
+                photos = photos.filter_by(camera_name=camera)
+            photos = photos.all()
+            
+            if photos:
+                return photos
+
+        # If not in database, fetch from API
         params = {}
         if earth_date:
             params['earth_date'] = earth_date
@@ -84,20 +84,30 @@ def get_cached_photos(rover, camera, earth_date, sol):
         photos_data = nasa_api.get_mars_photos(rover=rover, **params)
         
         # Store in database for future use
-        for photo_data in photos_data.get('photos', []):
-            photo = MarsPhoto(
-                nasa_id=str(photo_data['id']),
-                rover_name=rover,
-                camera_name=photo_data['camera']['name'],
-                image_url=photo_data['img_src'],
-                earth_date=datetime.strptime(photo_data['earth_date'], '%Y-%m-%d').date()
-            )
-            db.session.add(photo)
+        if photos_data and 'photos' in photos_data:
+            for photo_data in photos_data['photos']:
+                try:
+                    photo = MarsPhoto(
+                        nasa_id=str(photo_data['id']),
+                        rover_name=rover,
+                        camera_name=photo_data['camera']['name'],
+                        image_url=photo_data['img_src'],
+                        earth_date=datetime.strptime(photo_data['earth_date'], '%Y-%m-%d').date()
+                    )
+                    db.session.add(photo)
+                except (KeyError, ValueError) as e:
+                    print(f"Error processing photo data: {e}")
+                    continue
+            
+            try:
+                db.session.commit()
+            except Exception as e:
+                print(f"Error committing to database: {e}")
+                db.session.rollback()
         
-        db.session.commit()
         return photos_data.get('photos', [])
     except Exception as e:
-        print(f"Error fetching Mars photos: {e}")
+        print(f"Error in get_cached_photos: {e}")
         return []
 
 @bp.route('/mars')

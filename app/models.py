@@ -49,4 +49,42 @@ class NEO(db.Model):
     estimated_diameter_min = db.Column(db.Float)
     estimated_diameter_max = db.Column(db.Float)
     is_potentially_hazardous = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow) 
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class EarthImagery(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    image_url = db.Column(db.String(500), nullable=False)
+    cloud_score = db.Column(db.Float)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index('idx_location_date', 'latitude', 'longitude', 'date'),
+    )
+
+class EarthEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.String(100), unique=True, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    category = db.Column(db.String(50))
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+    date = db.Column(db.DateTime)
+    source = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ClimateData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    temperature = db.Column(db.Float)
+    precipitation = db.Column(db.Float)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index('idx_climate_location_date', 'latitude', 'longitude', 'date'),
+    ) 

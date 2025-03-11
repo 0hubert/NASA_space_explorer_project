@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}ISS Tracker - NASA Space Explorer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+<style>
+    #map {
+        height: 500px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    .iss-info-card {
+        height: 100%;
+        transition: transform 0.2s;
+    }
+    .iss-info-card:hover {
+        transform: translateY(-5px);
+    }
+    .astronaut-card {
+        border: none;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        transition: transform 0.2s;
+    }
+    .astronaut-card:hover {
+        transform: translateY(-5px);
+    }
+    .prediction-card {
+        margin-bottom: 15px;
+    }
+    .orbit-path {
+        stroke: #FC3D21;
+        stroke-width: 2;
+        fill: none;
+        opacity: 0.6;
+    }
+    .location-search {
+        margin-bottom: 20px;
+    }
+    .iss-icon {
+        width: 40px;
+        height: 40px;
+    }
+    .stats-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .stat-card {
+        padding: 15px;
+        text-align: center;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">International Space Station Tracker</h1>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        <!-- Current Stats -->
+        <div class="stats-container mb-4">
+            <div class="stat-card">
+                <h3 id="iss-speed">--- km/h</h3>
+                <p>Current Speed</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="iss-altitude">--- km</h3>
+                <p>Altitude</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="iss-position">---° N, ---° E</h3>
+                <p>Current Position</p>
+            </div>
+        </div>
+
+        <!-- Map and Information -->
+        <div class="row">
+            <!-- Full width map section -->
+            <div class="col-12">
+                <!-- Location Search -->
+                <div class="location-search">
+                    <div class="input-group">
+                        <input type="text" id="location-input" class="form-control" placeholder="Enter your location">
+                        <button class="btn btn-nasa" onclick="searchLocation()">
+                            <i class="fas fa-search"></i> Find Pass Times
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Map -->
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <!-- Information Cards Row -->
+        <div class="row mt-4">
+            <!-- Current Crew -->
+            <div class="col-md-6">
+                <div class="card iss-info-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-user-astronaut me-2"></i>Current Crew
+                        </h5>
+                        <div id="crew-list">
+                            {% for astronaut in astronauts %}
+                            <div class="astronaut-card p-2">
+                                <h6>{{ astronaut.name }}</h6>
+                                <small class="text-muted">{{ astronaut.craft }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pass Predictions -->
+            <div class="col-md-6">
+                <div class="card iss-info-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-clock me-2"></i>Next Pass Times
+                        </h5>
+                        <div id="pass-predictions">
+                            <p class="text-muted">Enter your location to see pass predictions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+    // Initialize map
+    const map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Custom ISS icon
+    const issIcon = L.icon({
+        iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/International_Space_Station.svg/32px-International_Space_Station.svg.png',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+    });
+
+    // ISS marker
+    let issMarker = L.marker([0, 0], {icon: issIcon}).addTo(map);
+    let orbitPath = L.polyline([], {
+        color: '#FC3D21',
+        weight: 2,
+        opacity: 0.6
+    }).addTo(map);
+
+    // Update ISS position
+    function updateISSPosition() {
+        fetch('/iss/position')
+            .then(response => response.json())
+            .then(data => {
+                const position = data.iss_position;
+                const lat = parseFloat(position.latitude);
+                const lon = parseFloat(position.longitude);
+
+                // Update marker position
+                issMarker.setLatLng([lat, lon]);
+                
+                // Update orbit path
+                let positions = orbitPath.getLatLngs();
+                positions.push([lat, lon]);
+                if (positions.length > 50) positions.shift();
+                orbitPath.setLatLngs(positions);
+
+                // Update stats
+                document.getElementById('iss-position').textContent = 
+                    `${lat.toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${lon.toFixed(2)}° ${lon >= 0 ? 'E' : 'W'}`;
+                
+                // Calculate approximate values
+                const altitude = 408; // Average ISS altitude in km
+                const speed = 27600; // Average ISS speed in km/h
+                document.getElementById('iss-altitude').textContent = `${altitude} km`;
+                document.getElementById('iss-speed').textContent = `${speed} km/h`;
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    // Search location for pass predictions
+    function searchLocation() {
+        const query = document.getElementById('location-input').value;
+        if (!query) {
+            alert('Please enter a location');
+            return;
+        }
+
+        // Show loading state
+        document.getElementById('pass-predictions').innerHTML = '<p class="text-muted">Loading predictions...</p>';
+        
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Location search failed');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    
+                    // Add marker for searched location
+                    const locationMarker = L.marker([lat, lon]).addTo(map);
+                    map.setView([lat, lon], 5);
+                    
+                    // Get pass predictions for this location
+                    return getPassPredictions(lat, lon);
+                } else {
+                    throw new Error('Location not found');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('pass-predictions').innerHTML = 
+                    `<div class="alert alert-danger">${error.message}</div>`;
+            });
+    }
+
+    // Get pass predictions
+    function getPassPredictions(lat, lon) {
+        return fetch(`/iss/pass-predictions?lat=${lat}&lon=${lon}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to get predictions');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                if (!data.response || !Array.isArray(data.response)) {
+                    throw new Error('Invalid prediction data received');
+                }
+
+                let predictionsHtml = '';
+                
+                // Show message if these are calculated predictions
+                if (data.message && data.message.includes('calculated')) {
+                    predictionsHtml += `
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Using calculated predictions (approximations)
+                        </div>
+                    `;
+                }
+
+                // Add prediction cards
+                if (data.response.length > 0) {
+                    predictionsHtml += data.response.map(pass => {
+                        const date = new Date(pass.risetime * 1000);
+                        return `
+                            <div class="prediction-card">
+                                <strong>${date.toLocaleDateString()} ${date.toLocaleTimeString()}</strong><br>
+                                <small>Duration: ${Math.round(pass.duration / 60)} minutes</small>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    predictionsHtml += '<p class="text-muted">No visible passes predicted for your location in the next 24 hours</p>';
+                }
+
+                document.getElementById('pass-predictions').innerHTML = predictionsHtml;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('pass-predictions').innerHTML = 
+                    `<div class="alert alert-danger">${error.message}</div>`;
+            });
+    }
+
+    // Add event listener for Enter key in location input
+    document.getElementById('location-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchLocation();
+        }
+    });
+
+    // Update crew information
+    function updateCrew() {
+        fetch('/iss/crew')
+            .then(response => response.json())
+            .then(data => {
+                const crewHtml = data.people.map(astronaut => `
+                    <div class="astronaut-card p-2">
+                        <h6>${astronaut.name}</h6>
+                        <small class="text-muted">${astronaut.craft}</small>
+                    </div>
+                `).join('');
+                document.getElementById('crew-list').innerHTML = crewHtml;
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    // Initialize with current position
+    updateISSPosition();
+    
+    // Update every 5 seconds
+    setInterval(updateISSPosition, 5000);
+    
+    // Update crew every 5 minutes
+    setInterval(updateCrew, 300000);
+</script>
+{% endblock %} 
